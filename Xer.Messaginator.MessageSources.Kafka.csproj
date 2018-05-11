@@ -1,9 +1,0 @@
-<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
-  </PropertyGroup>
-  <ItemGroup>
-    <PackageReference Include="Confluent.Kafka" Version="0.11.4"/>
-    <PackageReference Include="Xer.Messaginator" Version="1.1.0"/>
-  </ItemGroup>
-</Project>

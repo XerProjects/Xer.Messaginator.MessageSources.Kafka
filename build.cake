@@ -28,7 +28,7 @@ Setup(context =>
     buildParameters = new BuildParameters(Context);
     
     // Executed BEFORE the first task.
-    Information("Xer.DomainDriven");
+    Information("Xer.Messaginator.MessageSources.Kafka");
     Information("===========================================================================================");
     Information("Git Version");
     Information("Semver: {0}", buildParameters.GitVersion.LegacySemVerPadded);
