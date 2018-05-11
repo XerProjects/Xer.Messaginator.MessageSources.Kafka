@@ -62,6 +62,12 @@ namespace Xer.Messaginator.MessageSources.Kafka.Entities
                 _consumer.OnMessage += (_, msg)
                                     => ReceiveAsync(new MessageContainer<Message>(msg));
 
+                _consumer.OnError += (_, kfErr)
+                                  => publishKafkaError(kfErr);
+
+                _consumer.OnConsumeError += (_, msg)
+                                         => publishKafkaMessageError(msg);
+
                 while (!stop)
                 {
                     _consumer.Poll(_milSecondsInterval);                
@@ -71,6 +77,17 @@ namespace Xer.Messaginator.MessageSources.Kafka.Entities
             {
                 PublishException(ex);
             }
+        }
+
+        private void publishKafkaError(Error kafkaError)
+        {
+            Exception ex = new Exception(string.Format("Kafka ErrorCode: {0} {1} ", kafkaError.Code, kafkaError.Reason));
+            PublishException(ex);
+        }
+
+        private void publishKafkaMessageError(Message message)
+        {
+            publishKafkaError(message.Error);
         }
 
     }
