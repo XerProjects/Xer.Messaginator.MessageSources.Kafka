@@ -11,9 +11,10 @@ namespace Xer.Messaginator.MessageSources.Kafka.Entities
         private readonly Consumer _consumer;
         private readonly string _topic;
         private readonly int _milSecondsInterval;
-        private Task consumerTask;
+        private bool stop;
         private CancellationToken requestedCancellationToken;
-        private ConsumerState consumerState;
+        private Task consumerPollingTask;
+
         public KafkaMessageSource( Consumer consumer,
                                    string topic, 
                                    int milSecondsInterval )
@@ -23,8 +24,7 @@ namespace Xer.Messaginator.MessageSources.Kafka.Entities
             _milSecondsInterval = milSecondsInterval;
 
             _consumer.Subscribe(_topic);
-
-
+            
         }
 
         public override Task ReceiveAsync(MessageContainer<Message> message, CancellationToken cancellationToken = default(CancellationToken))
@@ -41,63 +41,37 @@ namespace Xer.Messaginator.MessageSources.Kafka.Entities
 
         public override Task StartReceivingAsync(CancellationToken cancellationToken = default(CancellationToken))
         {
-            requestedCancellationToken = cancellationToken;
-
-            if (consumerState != ConsumerState.Running)
-            {
-                consumerState = ConsumerState.Running;
-
-                while ( consumerState == ConsumerState.Running && 
-                        !requestedCancellationToken.IsCancellationRequested)
-                {
-                    consumerTask = ProcessNextMessageAsync(requestedCancellationToken);
-                }
-            }
+            stop = false;
+            
+            consumerPollingTask = ProcessNextMessageAsync(cancellationToken);
 
             return Task.CompletedTask;
         }
 
         public override Task StopReceivingAsync(CancellationToken cancellationToken = default(CancellationToken))
         {
-            if (consumerState != ConsumerState.Stopped)
-            {
-                consumerState = ConsumerState.Stopped;                                                
-            }
+            stop = true;
 
-            return consumerTask;
+            return consumerPollingTask;
         }
 
         private async Task ProcessNextMessageAsync(CancellationToken cancellationToken)
         {
             try 
             {
-                MessageContainer<Message> message = await GetNextMessageAsync(cancellationToken).ConfigureAwait(false);
+                _consumer.OnMessage += (_, msg)
+                                    => ReceiveAsync(new MessageContainer<Message>(msg));
 
-                PublishMessage(message);
+                while (!stop)
+                {
+                    _consumer.Poll(_milSecondsInterval);                
+                }
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
-                _consumer.OnError += (_, err) => PublishException(e);
-
-                _consumer.OnConsumeError += (_, err) => PublishException(e);
-                
+                PublishException(ex);
             }
         }
 
-        private Task<MessageContainer<Message>> GetNextMessageAsync (CancellationToken cancellationToken)
-        {
-            if (_consumer.Consume( out Message msg, _milSecondsInterval ))
-            {
-                return Task.FromResult(new MessageContainer<Message>(msg));
-            }
-
-            return Task.FromResult(MessageContainer<Message>.Empty);
-        }
-
-        private enum ConsumerState 
-        {
-            Stopped,
-            Running
-        }
     }
 }
