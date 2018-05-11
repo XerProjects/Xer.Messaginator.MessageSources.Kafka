@@ -23,6 +23,12 @@ namespace Xer.Messaginator.MessageSources.Kafka.Entities
             _topic = topic;
             _milSecondsInterval = milSecondsInterval;
 
+            _consumer.OnError += (_, kfErr)
+                                => publishKafkaError(kfErr);
+
+            _consumer.OnConsumeError += (_, msg)
+                                        => publishKafkaMessageError(msg);
+
             _consumer.Subscribe(_topic);
             
         }
@@ -61,12 +67,6 @@ namespace Xer.Messaginator.MessageSources.Kafka.Entities
             {
                 _consumer.OnMessage += (_, msg)
                                     => ReceiveAsync(new MessageContainer<Message>(msg));
-
-                _consumer.OnError += (_, kfErr)
-                                  => publishKafkaError(kfErr);
-
-                _consumer.OnConsumeError += (_, msg)
-                                         => publishKafkaMessageError(msg);
 
                 while (!stop)
                 {
