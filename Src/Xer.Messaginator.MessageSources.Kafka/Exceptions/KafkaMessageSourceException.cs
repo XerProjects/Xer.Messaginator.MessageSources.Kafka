@@ -1,7 +1,7 @@
 using System;
 using Confluent.Kafka;
 
-namespace Xer.Messaginator.MessageSources.Kafka
+namespace Xer.Messaginator.MessageSources.Kafka.Exceptions
 {
     public class KafkaMessageSourceException : Exception
     {
@@ -19,8 +19,13 @@ namespace Xer.Messaginator.MessageSources.Kafka
 
         private static string EnsureNotNull(Error kafkaError)
         {
+            if (kafkaError == null)
+            {
+                throw new ArgumentNullException(nameof(kafkaError));
+            }
+            
             // Create kafka error message.
-            return $"Kafka Error: {kafkaError.Code}|{kafkaError.Reason}";
+            return $"Kafka Error: {kafkaError.Code} | {kafkaError.ToString()}";
         }
     }
 }

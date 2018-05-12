@@ -1,42 +1,50 @@
 using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Confluent.Kafka;
+using Xer.Messaginator.MessageSources.Kafka.Exceptions;
 
-namespace Xer.Messaginator.MessageSources.Kafka.Entities
+namespace Xer.Messaginator.MessageSources.Kafka
 {
-    public class KafkaMessageSource<TMessage> : MessageSource<TMessage> where TMessage : class
+    
+    /// <summary>
+    /// Kafka message source that has a key and a value.
+    /// </summary>
+    public class KafkaMessageSource<TKey, TValue> : MessageSource<TValue>, IDisposable where TValue : class
     {
-        private ConcurrentQueue<TMessage> _queuedMessages = new ConcurrentQueue<TMessage>();
-        private readonly Consumer<Null, TMessage> _consumer;
-        private Timer _timer;
+        private readonly ConcurrentQueue<MessageContainer<TValue>> _queuedMessages = new ConcurrentQueue<MessageContainer<TValue>>();
+        private readonly Consumer<TKey, TValue> _consumer;
+        private readonly Timer _timer;
 
         public TimeSpan PollDuration { get; }
+        public TimeSpan PublishQueuedMessagesInterval { get; }
         protected bool ShouldStopPolling { get; private set; }
-
-        public KafkaMessageSource(Consumer<Null, TMessage> consumer, TimeSpan pollDuration, TimeSpan queuedMessagePublishInterval)
+        
+        public KafkaMessageSource(KafkaConsumerProperties<TKey, TValue> properties, TimeSpan pollDuration, TimeSpan publishQueuedMessagesInterval)
         {
-            _consumer = consumer ?? throw new ArgumentNullException(nameof(consumer));
+            _consumer = new Consumer<TKey, TValue>(properties, properties.KeyDeserializer, properties.ValueDeserializer);
+            _consumer.Subscribe(properties.Topics);
+
             // Subscribe to kafka consumer events.
             _consumer.OnMessage += OnKafkaMessageReceived;
             _consumer.OnError += (_, kafkaError) => PublishKafkaError(kafkaError);
             _consumer.OnConsumeError += (_, kafkaMessage) => PublishKafkaError(kafkaMessage.Error);
             
             PollDuration = pollDuration;
+            PublishQueuedMessagesInterval = publishQueuedMessagesInterval;
 
-            // Publish queued message every 500 milliseconds.
-            _timer = new Timer(PublishQueuedMessages, _queuedMessages, 0, queuedMessagePublishInterval.Milliseconds);
+            // Publish queued message every configured.
+            _timer = new Timer(PublishQueuedMessages, _queuedMessages, 0, publishQueuedMessagesInterval.Milliseconds);
         }
 
-        public override Task ReceiveAsync(MessageContainer<TMessage> message, CancellationToken cancellationToken = default(CancellationToken))
+        public override Task ReceiveAsync(MessageContainer<TValue> message, CancellationToken cancellationToken = default(CancellationToken))
         {
             if (message == null)
             {
                 return Task.FromException(new ArgumentNullException(nameof(message)));
             }
-
+            
             _queuedMessages.Enqueue(message);
             
             return Task.CompletedTask;
@@ -75,11 +83,11 @@ namespace Xer.Messaginator.MessageSources.Kafka.Entities
             return Task.CompletedTask;
         }
 
-        protected virtual void OnKafkaMessageReceived(object sender, Message<Null, TMessage> kafkaMessage)
+        protected virtual void OnKafkaMessageReceived(object sender, Message<TKey, TValue> kafkaMessage)
         {
             try
             {
-                PublishMessage(new MessageContainer<TMessage>(kafkaMessage.Value));
+                PublishMessage(new MessageContainer<TValue>(kafkaMessage.Value));
             }
             catch (Exception ex)
             {
@@ -94,20 +102,30 @@ namespace Xer.Messaginator.MessageSources.Kafka.Entities
 
         private void PublishQueuedMessages(object state)
         {
-            ConcurrentQueue<TMessage> queuedMessages = state as ConcurrentQueue<TMessage>;
+            ConcurrentQueue<MessageContainer<TValue>> queuedMessages = state as ConcurrentQueue<MessageContainer<TValue>>;
             if (queuedMessages == null)
             {
                 return;
             }
 
+            int messageCount = 0;
+
             do 
             {
-                if (queuedMessages.TryDequeue(out TMessage queuedMessage))
+                if (queuedMessages.TryDequeue(out MessageContainer<TValue> queuedMessage))
                 {
-                    PublishMessage(new MessageContainer<TMessage>(queuedMessage));
+                    PublishMessage(queuedMessage);
+                    messageCount++;
                 }
             }
-            while (!queuedMessages.IsEmpty);
+            // Publish 10 queued messages per tick.
+            while (messageCount <= 10 && !queuedMessages.IsEmpty);
+        }
+
+        public void Dispose()
+        {
+            _consumer.Dispose();
+            _timer.Dispose();
         }
     }
 }
