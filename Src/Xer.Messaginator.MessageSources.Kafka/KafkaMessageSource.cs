@@ -33,7 +33,9 @@ namespace Xer.Messaginator.MessageSources.Kafka
         public TimeSpan PublishQueuedMessagesInterval { get; }
         protected bool ShouldStopPolling { get; private set; }
         
-        public KafkaMessageSource(KafkaConsumerProperties<TKey, TValue> properties, TimeSpan pollDuration, TimeSpan publishQueuedMessagesInterval)
+        public KafkaMessageSource(KafkaConsumerProperties<TKey, TValue> properties, 
+                                  TimeSpan pollDuration, 
+                                  TimeSpan publishQueuedMessagesInterval)
         {
             _consumer = new Consumer<TKey, TValue>(properties, properties.KeyDeserializer, properties.ValueDeserializer);
             _consumer.Subscribe(properties.Topics);
