@@ -7,7 +7,19 @@ using Xer.Messaginator.MessageSources.Kafka.Exceptions;
 
 namespace Xer.Messaginator.MessageSources.Kafka
 {
-    
+    /// <summary>
+    /// Kafka message source that has a Null key.
+    /// </summary>
+    public class KafkaMessageSource<TValue> : KafkaMessageSource<Null, TValue> where TValue : class
+    {
+        public KafkaMessageSource(KafkaConsumerProperties<Null, TValue> properties, 
+                                  TimeSpan pollDuration, 
+                                  TimeSpan publishQueuedMessagesInterval) 
+            : base(properties, pollDuration, publishQueuedMessagesInterval)
+        {
+        }
+    }
+
     /// <summary>
     /// Kafka message source that has a key and a value.
     /// </summary>
